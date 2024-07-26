@@ -28,6 +28,7 @@ from .models import (
     DeserializerType,
     TimestampExtractor,
 )
+from .models.types import Headers
 from .platforms.quix import (
     QuixKafkaConfigsBuilder,
     check_state_dir,
@@ -41,6 +42,9 @@ from .sinks import SinkManager
 from .state import StateStoreManager
 from .state.recovery import RecoveryManager
 from .state.rocksdb import RocksDBOptionsType
+
+from .sources import BaseSource
+from .sources.manager import SourceManager
 
 __all__ = ("Application",)
 
@@ -271,6 +275,7 @@ class Application:
         self._producer_extra_config = producer_extra_config
         self._consumer_extra_config = consumer_extra_config
         self._processing_guarantee = processing_guarantee
+
         self._consumer = RowConsumer(
             broker_address=broker_address,
             consumer_group=consumer_group,
@@ -322,6 +327,8 @@ class Application:
                 else None
             ),
         )
+
+        self._source_manager = SourceManager()
         self._sink_manager = SinkManager()
         self._pausing_manager = PausingManager(consumer=self._consumer)
         self._processing_context = ProcessingContext(
@@ -333,6 +340,7 @@ class Application:
             exactly_once=self._uses_exactly_once,
             sink_manager=self._sink_manager,
             pausing_manager=self._pausing_manager,
+            source_manager=self._source_manager,
         )
 
     @property
@@ -567,7 +575,8 @@ class Application:
 
     def dataframe(
         self,
-        topic: Topic,
+        topic: Optional[Topic] = None,
+        source: Optional[BaseSource] = None,
     ) -> StreamingDataFrame:
         """
         A simple helper method that generates a `StreamingDataFrame`, which is used
@@ -597,8 +606,14 @@ class Application:
             to be used as an input topic.
         :return: `StreamingDataFrame` object
         """
+        if not source and not topic:
+            raise TypeError("one of `source` or `topic` is required")
+        elif source and not topic:
+            topic = source.default_topic(self)
+
         sdf = StreamingDataFrame(
             topic=topic,
+            source=source,
             topic_manager=self._topic_manager,
             processing_context=self._processing_context,
         )
@@ -657,7 +672,9 @@ class Application:
             extra_config=self._producer_extra_config,
         )
 
-    def get_consumer(self, auto_commit_enable: bool = True) -> Consumer:
+    def get_consumer(
+        self, auto_commit_enable: bool = True, consummer_group: Optional[str] = None
+    ) -> Consumer:
         """
         Create and return a pre-configured Consumer instance.
         The Consumer is initialized with params passed to Application.
@@ -698,7 +715,7 @@ class Application:
 
         return Consumer(
             broker_address=self._broker_address,
-            consumer_group=self._consumer_group,
+            consumer_group=consummer_group or self._consumer_group,
             auto_offset_reset=self._auto_offset_reset,
             auto_commit_enable=auto_commit_enable,
             extra_config=self._consumer_extra_config,
@@ -752,6 +769,20 @@ class Application:
         )
         if self.is_quix_app:
             self._quix_runtime_init()
+
+        if dataframe.source:
+            producer = RowProducer(
+                broker_address=self._broker_address,
+                extra_config=self._producer_extra_config,
+                flush_timeout=self._consumer_extra_config.get(
+                    "max.poll.interval.ms", _default_max_poll_interval_ms
+                )
+                / 1000,  # convert to seconds
+                transactional=self._uses_exactly_once,
+            )
+            self._processing_context.source_manager.register(
+                dataframe.source, producer, dataframe.topic
+            )
 
         self._setup_topics()
 

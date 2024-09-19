@@ -14,6 +14,8 @@ from .multiprocessing import multiprocessing
 
 logger = logging.getLogger(__name__)
 
+SOURCE_STORE_TMPL = "source-{}"
+
 
 class SourceProcess(multiprocessing.Process):
     """
@@ -25,10 +27,11 @@ class SourceProcess(multiprocessing.Process):
     Some methods are designed to be used from the parent process, and others from the child process.
     """
 
-    def __init__(self, source, store):
+    def __init__(self, source: BaseSource, store, partition: int):
         super().__init__()
         self.source: BaseSource = source
         self.store = store
+        self.partition = partition
 
         self._exceptions: List[Exception] = []
         self._started = False
@@ -186,6 +189,11 @@ class SourceManager:
             raise ValueError(f"source '{source}' already registered")
 
         self._sources[source.producer_topic.name] = source
+        self._state_manager.register_store(
+            source.producer_topic.name,
+            store_name=SOURCE_STORE_TMPL.format(source.name),
+            type="memory",
+        )
 
     @property
     def active(self):
@@ -202,7 +210,9 @@ class SourceManager:
     def on_assign(self, topic: str, partition: int):
         self._processes[(topic, partition)] = None
         source = self._sources[topic]
-        self._state_manager.get_store(topic, f"source-{source.name}")
+
+        # make sure the store is created
+        self._state_manager.get_store(topic, SOURCE_STORE_TMPL.format(source.name))
 
     def on_revoke(self, topic: str, partition: int):
         self._stop_process(topic, partition)
@@ -221,10 +231,14 @@ class SourceManager:
         for (topic, partition), process in self._processes.items():
             if process is None:
                 source = self._sources[topic]
-                store = self._state_manager.get_store(topic, f"source-{source.name}")
+                store = self._state_manager.get_store(
+                    topic, SOURCE_STORE_TMPL.format(source.name)
+                )
 
                 self._processes[(topic, partition)] = SourceProcess(
-                    source=source, store=store
+                    source=source,
+                    store=store,
+                    partition=partition,
                 )
                 self._processes[(topic, partition)].start()
 

@@ -85,16 +85,9 @@ class StorePartition(Protocol):
 
     """
 
-    @property
-    def path(self) -> str:
-        """
-        Absolute path to RocksDB database folder
-        """
-        ...
-
     def begin(self) -> "PartitionTransaction":
         """
-        State new `PartitionTransaction`
+        Start new `PartitionTransaction`
         """
 
     def recover_from_changelog_message(
@@ -119,16 +112,6 @@ class StorePartition(Protocol):
         """
         Get offset that the changelog is up-to-date with.
         :return: offset or `None` if there's no processed offset yet
-        """
-        ...
-
-    def set_changelog_offset(self, changelog_offset: int):
-        """
-        Set the changelog offset based on a message (usually an "offset-only" message).
-
-        Used during recovery.
-
-        :param changelog_offset: A changelog offset
         """
         ...
 

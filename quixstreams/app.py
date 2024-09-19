@@ -759,9 +759,6 @@ class Application:
             topic = source.default_topic()
             self._topic_manager.register(topic)
 
-        self._state_manager.register_store(
-            topic.name, store_name=f"source-{source.name}"
-        )
         producer = self._get_rowproducer(transactional=False)
         source.configure(topic, producer)
         self._source_manager.register(source)

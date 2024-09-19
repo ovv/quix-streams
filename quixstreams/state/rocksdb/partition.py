@@ -166,16 +166,6 @@ class RocksDBStorePartition(StorePartition):
 
         self._changelog_recover_flush(changelog_message.offset(), batch)
 
-    def set_changelog_offset(self, changelog_offset: int):
-        """
-        Set the changelog offset based on a message (usually an "offset-only" message).
-
-        Used during recovery.
-
-        :param changelog_offset: A changelog offset
-        """
-        self._changelog_recover_flush(changelog_offset, WriteBatch(raw_mode=True))
-
     def write(self, batch: WriteBatch):
         """
         Write `WriteBatch` to RocksDB

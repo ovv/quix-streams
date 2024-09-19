@@ -13,6 +13,7 @@ from .recovery import RecoveryManager, ChangelogProducerFactory
 from .rocksdb import RocksDBStore, RocksDBOptionsType
 from .rocksdb.windowed.store import WindowedRocksDBStore
 from .types import Store, StorePartition
+from .memory import MemoryStore
 
 __all__ = ("StateStoreManager", "DEFAULT_STATE_STORE_NAME")
 
@@ -158,14 +159,12 @@ class StateStoreManager:
                     options=self._rocksdb_options,
                 )
             elif type == "memory":
-                self._stores.setdefault(topic_name, {})[store_name] = RocksDBStore(
+                self._stores.setdefault(topic_name, {})[store_name] = MemoryStore(
                     name=store_name,
                     topic=topic_name,
-                    base_dir=str(self._state_dir),
                     changelog_producer_factory=self._setup_changelogs(
                         topic_name, store_name
                     ),
-                    options=self._rocksdb_options,
                 )
             else:
                 raise RuntimeError(f"invalid store type {type}")

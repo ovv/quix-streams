@@ -324,7 +324,7 @@ class Application:
             recovery_manager=recovery_manager,
         )
 
-        self._source_manager = SourceManager()
+        self._source_manager = SourceManager(state_manager=self._state_manager)
         self._sink_manager = SinkManager()
         self._pausing_manager = PausingManager(consumer=self._consumer)
         self._processing_context = ProcessingContext(
@@ -759,6 +759,9 @@ class Application:
             topic = source.default_topic()
             self._topic_manager.register(topic)
 
+        self._state_manager.register_store(
+            topic.name, store_name=f"source-{source.name}"
+        )
         producer = self._get_rowproducer(transactional=False)
         source.configure(topic, producer)
         self._source_manager.register(source)
@@ -856,6 +859,7 @@ class Application:
             if self._state_manager.recovery_required:
                 self._state_manager.do_recovery()
             else:
+                self._source_manager.start_sources()
                 self._process_message(dataframe_composed)
                 self._processing_context.commit_checkpoint()
                 self._processing_context.resume_ready_partitions()
@@ -959,7 +963,7 @@ class Application:
         # can produce data before the consumer starts. If that happens on a new
         # consumer with `auto_offset_reset` set to `latest` the consumer will not
         # get the source data.
-        self._source_manager.start_sources()
+        # self._source_manager.start_sources()
 
         # First commit everything processed so far because assignment can take a while
         # and fail
@@ -1003,6 +1007,10 @@ class Application:
                         f"It may lead to distortions in produced data."
                     )
 
+        if self._source_manager.active:
+            for tp in topic_partitions:
+                self._source_manager.on_assign(topic=tp.topic, partition=tp.partition)
+
     def _on_revoke(self, _, topic_partitions: List[TopicPartition]):
         """
         Revoke partitions from consumer and state
@@ -1026,6 +1034,8 @@ class Application:
                 self._state_manager.on_partition_revoke(
                     topic=tp.topic, partition=tp.partition
                 )
+            if self._source_manager.active:
+                self._source_manager.on_revoke(topic=tp.topic, partition=tp.partition)
             self._processing_context.on_partition_revoke(
                 topic=tp.topic, partition=tp.partition
             )
@@ -1040,6 +1050,8 @@ class Application:
                 self._state_manager.on_partition_revoke(
                     topic=tp.topic, partition=tp.partition
                 )
+            if self._source_manager.active:
+                self._source_manager.on_lost(topic=tp.topic, partition=tp.partition)
             self._processing_context.on_partition_revoke(
                 topic=tp.topic, partition=tp.partition
             )

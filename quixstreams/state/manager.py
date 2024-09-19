@@ -130,7 +130,10 @@ class StateStoreManager:
             )
 
     def register_store(
-        self, topic_name: str, store_name: str = DEFAULT_STATE_STORE_NAME
+        self,
+        topic_name: str,
+        store_name: str = DEFAULT_STATE_STORE_NAME,
+        type: str = "rocksdb",
     ):
         """
         Register a state store to be managed by StateStoreManager.
@@ -144,15 +147,28 @@ class StateStoreManager:
         :param store_name: store name
         """
         if self._stores.get(topic_name, {}).get(store_name) is None:
-            self._stores.setdefault(topic_name, {})[store_name] = RocksDBStore(
-                name=store_name,
-                topic=topic_name,
-                base_dir=str(self._state_dir),
-                changelog_producer_factory=self._setup_changelogs(
-                    topic_name, store_name
-                ),
-                options=self._rocksdb_options,
-            )
+            if type == "rocksdb":
+                self._stores.setdefault(topic_name, {})[store_name] = RocksDBStore(
+                    name=store_name,
+                    topic=topic_name,
+                    base_dir=str(self._state_dir),
+                    changelog_producer_factory=self._setup_changelogs(
+                        topic_name, store_name
+                    ),
+                    options=self._rocksdb_options,
+                )
+            elif type == "memory":
+                self._stores.setdefault(topic_name, {})[store_name] = RocksDBStore(
+                    name=store_name,
+                    topic=topic_name,
+                    base_dir=str(self._state_dir),
+                    changelog_producer_factory=self._setup_changelogs(
+                        topic_name, store_name
+                    ),
+                    options=self._rocksdb_options,
+                )
+            else:
+                raise RuntimeError(f"invalid store type {type}")
 
     def register_windowed_store(self, topic_name: str, store_name: str):
         """

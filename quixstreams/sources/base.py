@@ -9,6 +9,7 @@ from quixstreams.models.topics import Topic
 from quixstreams.models.types import Headers
 from quixstreams.rowproducer import RowProducer
 from quixstreams.checkpointing.exceptions import CheckpointProducerTimeout
+from quixstreams.state.types import Store
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class BaseSource(ABC):
     def __init__(self):
         self._producer: Optional[RowProducer] = None
         self._producer_topic: Optional[Topic] = None
+        self._store: Optional[Store] = None
         self._configured: bool = False
 
     def configure(self, topic: Topic, producer: RowProducer) -> None:
@@ -90,7 +92,7 @@ class BaseSource(ABC):
         return self._producer_topic
 
     @abstractmethod
-    def start(self) -> None:
+    def start(self, store) -> None:
         """
         This method is triggered in the subprocess when the source is started.
 
@@ -206,7 +208,7 @@ class Source(BaseSource):
         self._running = False
         super().stop()
 
-    def start(self):
+    def start(self, store):
         """
         This method is triggered in the subprocess when the source is started.
 

@@ -3,7 +3,9 @@ import logging
 import signal
 
 from pickle import PicklingError
-from typing import List
+from typing import List, Dict
+
+from confluent_kafka import TopicPartition
 
 from quixstreams.logging import configure_logging, LOGGER_NAME
 from quixstreams.models import Topic
@@ -23,9 +25,10 @@ class SourceProcess(multiprocessing.Process):
     Some methods are designed to be used from the parent process, and others from the child process.
     """
 
-    def __init__(self, source):
+    def __init__(self, source, store):
         super().__init__()
         self.source: BaseSource = source
+        self.store = store
 
         self._exceptions: List[Exception] = []
         self._started = False
@@ -65,7 +68,7 @@ class SourceProcess(multiprocessing.Process):
         logger.info("Source started")
 
         try:
-            self.source.start()
+            self.source.start(self.store)
         except BaseException as err:
             logger.exception(f"Error in source")
             self._report_exception(err)
@@ -163,8 +166,11 @@ class SourceManager:
     Sources run in their separate process pay attention about cross-process communication
     """
 
-    def __init__(self):
-        self.processes: List[SourceProcess] = []
+    def __init__(self, state_manager):
+        self._state_manager = state_manager
+
+        self._processes: Dict[TopicPartition, SourceProcess] = {}
+        self._sources: Dict[str, BaseSource] = {}
 
     def register(self, source: BaseSource):
         """
@@ -179,39 +185,69 @@ class SourceManager:
         elif source in self.sources:
             raise ValueError(f"source '{source}' already registered")
 
-        process = SourceProcess(source)
-        self.processes.append(process)
-        return process
+        self._sources[source.producer_topic.name] = source
+
+    @property
+    def active(self):
+        return bool(self._sources)
 
     @property
     def sources(self) -> List[BaseSource]:
-        return [process.source for process in self.processes]
+        return self._sources.values()
 
     @property
     def topics(self) -> List[Topic]:
-        return [process.source.producer_topic for process in self.processes]
+        return self._sources.keys()
+
+    def on_assign(self, topic: str, partition: int):
+        self._processes[(topic, partition)] = None
+        source = self._sources[topic]
+        self._state_manager.get_store(topic, f"source-{source.name}")
+
+    def on_revoke(self, topic: str, partition: int):
+        self._stop_process(topic, partition)
+
+    def on_lost(self, topic: str, partition: int):
+        self._stop_process(topic, partition)
+
+    def _stop_process(self, topic, partition):
+        process = self._processes.pop((topic, partition), None)
+        if not process:
+            return
+        process.stop()
+        process.close()
 
     def start_sources(self) -> None:
-        for process in self.processes:
-            if not process.started:
-                process.start()
+        for (topic, partition), process in self._processes.items():
+            if process is None:
+                source = self._sources[topic]
+                store = self._state_manager.get_store(topic, f"source-{source.name}")
+
+                self._processes[(topic, partition)] = SourceProcess(
+                    source=source, store=store
+                )
+                self._processes[(topic, partition)].start()
 
     def stop_sources(self) -> None:
-        for process in self.processes:
-            process.stop()
+        for process in self._processes.values():
+            if process is not None:
+                process.stop()
 
         try:
             self.raise_for_error()
         finally:
-            for process in self.processes:
-                process.close()
+            for process in self._processes.values():
+                if process is not None:
+                    process.close()
+            self._processes = {}
 
     def raise_for_error(self) -> None:
         """
         Raise an exception if any process has stopped with an exception
         """
-        for process in self.processes:
-            process.raise_for_error()
+        for process in self._processes.values():
+            if process is not None:
+                process.raise_for_error()
 
     def is_alive(self) -> bool:
         """
@@ -219,12 +255,13 @@ class SourceManager:
 
         :return: True if at least one process is alive
         """
-        for process in self.processes:
-            try:
-                if process.is_alive():
-                    return True
-            except ValueError:
-                continue
+        for process in self._processes.values():
+            if process is not None:
+                try:
+                    if process.is_alive():
+                        return True
+                except ValueError:
+                    continue
 
         return False
 

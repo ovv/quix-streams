@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 
 from confluent_kafka import TopicPartition as ConfluentPartition
 
@@ -193,8 +193,8 @@ class ChangelogProducer:
 
     def produce(
         self,
-        key: bytes,
-        value: Optional[bytes] = None,
+        key: Optional[Union[str, bytes]] = None,
+        value: Optional[Union[str, bytes]] = None,
         headers: Optional[MessageHeadersMapping] = None,
     ):
         """

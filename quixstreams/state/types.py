@@ -90,6 +90,8 @@ class StorePartition(Protocol):
         Start new `PartitionTransaction`
         """
 
+    def close(self): ...
+
     def recover_from_changelog_message(
         self, changelog_message: ConfluentKafkaMessageProto, committed_offset: int
     ):

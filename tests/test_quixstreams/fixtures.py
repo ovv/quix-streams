@@ -318,6 +318,7 @@ def app_factory(kafka_container, random_consumer_group, tmp_path, store_type):
             topic_manager=topic_manager,
             processing_guarantee=processing_guarantee,
             request_timeout=request_timeout,
+            state_store_type=store_type,
         )
 
     with patch(
@@ -483,6 +484,7 @@ def quix_app_factory(
             quix_config_builder=quix_mock_config_builder_factory(
                 workspace_id=workspace_id
             ),
+            state_store_type=store_type,
         )
 
     with patch(

@@ -297,7 +297,6 @@ def app_factory(kafka_container, random_consumer_group, tmp_path, store_type):
         topic_manager: Optional[TopicManager] = None,
         processing_guarantee: ProcessingGuarantee = "at-least-once",
         request_timeout: float = 30,
-        store_type: StoreTypes = store_type,
     ) -> Application:
         state_dir = state_dir or (tmp_path / "state").absolute()
         return Application(
@@ -318,7 +317,6 @@ def app_factory(kafka_container, random_consumer_group, tmp_path, store_type):
             topic_manager=topic_manager,
             processing_guarantee=processing_guarantee,
             request_timeout=request_timeout,
-            state_store_type=store_type,
         )
 
     with patch(
@@ -465,7 +463,6 @@ def quix_app_factory(
         auto_create_topics: bool = True,
         use_changelog_topics: bool = True,
         workspace_id: str = "my_ws",
-        store_type: Optional[StoreTypes] = store_type,
     ) -> Application:
         state_dir = state_dir or (tmp_path / "state").absolute()
         return Application(
@@ -484,7 +481,6 @@ def quix_app_factory(
             quix_config_builder=quix_mock_config_builder_factory(
                 workspace_id=workspace_id
             ),
-            state_store_type=store_type,
         )
 
     with patch(

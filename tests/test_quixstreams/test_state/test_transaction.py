@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 
-from quixstreams.state.manager import SUPPORTED_STORES
 from quixstreams.state.base import PartitionTransaction
 from quixstreams.state.base.transaction import PartitionTransactionCache
 from quixstreams.state.exceptions import (
@@ -13,15 +12,14 @@ from quixstreams.state.exceptions import (
     StateTransactionError,
     InvalidChangelogOffset,
 )
+from quixstreams.state.manager import SUPPORTED_STORES
 from quixstreams.state.metadata import (
     CHANGELOG_CF_MESSAGE_HEADER,
     CHANGELOG_PROCESSED_OFFSET_MESSAGE_HEADER,
     UNDEFINED,
     DELETED,
 )
-from quixstreams.state.serialization import (
-    serialize,
-)
+from quixstreams.state.serialization import serialize
 from quixstreams.utils.json import dumps
 
 TEST_KEYS = [
